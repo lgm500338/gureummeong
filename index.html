@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#7fa9d6">
+<title>구름멍</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#27304a;
+  --paper:#ffffff;
+  --glass:rgba(255,255,255,.16);
+  --glass-line:rgba(255,255,255,.32);
+  --sheet:rgba(24,32,56,.62);
+  --blush:#f59bb0;
+  --serif:'Gowun Batang','Nanum Myeongjo','AppleMyungjo',serif;
+  --sans:'Gowun Dodum','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+  --sat:env(safe-area-inset-top,0px);
+  --sab:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#7fa9d6;color:#fff;font-family:var(--sans);-webkit-user-select:none;user-select:none;overscroll-behavior:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible{outline:2px solid #fff;outline-offset:3px;border-radius:12px}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+#sky{transition:opacity .9s ease}
+#sky.fade{opacity:0}
+#floatLayer{pointer-events:none}
+#drawLayer{pointer-events:none;touch-action:none}
+body.drawing #drawLayer{pointer-events:auto}
+
+.shadowtext{text-shadow:0 1px 14px rgba(20,32,64,.38),0 0 2px rgba(20,32,64,.25)}
+
+/* 상단: 지금 보고 있는 하늘 */
+#place{position:fixed;left:22px;right:22px;top:calc(18px + var(--sat));transition:opacity .8s ease,transform .8s ease}
+#place h1{margin:0;font-family:var(--serif);font-weight:700;font-size:27px;letter-spacing:-.01em;line-height:1.25}
+#place p{margin:6px 0 0;font-size:14.5px;line-height:1.55;max-width:30em;opacity:.95}
+#demoTag{display:none;margin-top:10px;font-size:12px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.18);border:1px solid var(--glass-line);width:max-content}
+body.demo #demoTag{display:block}
+
+/* 하단 도크 */
+#dock{position:fixed;left:50%;bottom:calc(20px + var(--sab));transform:translateX(-50%);display:flex;gap:4px;padding:6px;border-radius:26px;background:var(--glass);border:1px solid var(--glass-line);-webkit-backdrop-filter:blur(18px) saturate(1.2);backdrop-filter:blur(18px) saturate(1.2);transition:opacity .8s ease,transform .8s ease}
+#dock button{display:flex;flex-direction:column;align-items:center;gap:4px;width:74px;padding:9px 0 8px;border-radius:20px;font-size:11.5px}
+#dock button:active{background:rgba(255,255,255,.18)}
+#dock svg{width:23px;height:23px;stroke:#fff;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 6px rgba(20,32,64,.35))}
+
+body:not(.started) #place,body:not(.started) #dock,body.calm #place,body.calm #dock{opacity:0;pointer-events:none}
+body.calm #dock{transform:translateX(-50%) translateY(12px)}
+body.drawing #place,body.drawing #dock{opacity:0;pointer-events:none}
+
+/* 시트 */
+#scrim{position:fixed;inset:0;background:rgba(10,16,32,.25);opacity:0;pointer-events:none;transition:opacity .35s}
+#sheet{position:fixed;left:0;right:0;bottom:0;max-height:78%;overflow-y:auto;padding:10px 18px calc(22px + var(--sab));border-radius:26px 26px 0 0;background:var(--sheet);-webkit-backdrop-filter:blur(26px) saturate(1.3);backdrop-filter:blur(26px) saturate(1.3);transform:translateY(105%);transition:transform .42s cubic-bezier(.2,.8,.2,1)}
+body.sheet #sheet{transform:none}
+body.sheet #scrim{opacity:1;pointer-events:auto}
+body.sheet #place,body.sheet #dock{opacity:0;pointer-events:none}
+.grab{width:40px;height:4px;border-radius:4px;background:rgba(255,255,255,.35);margin:2px auto 12px}
+#sheet h2{font-family:var(--serif);font-size:18px;font-weight:700;margin:14px 4px 10px}
+.row{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:11px 8px;border-radius:16px}
+.row:active,.row.on{background:rgba(255,255,255,.12)}
+.swatch{flex:none;width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.35);position:relative;overflow:hidden}
+.swatch i{position:absolute;left:10%;right:10%;top:52%;height:34%;border-radius:50%;background:rgba(255,255,255,.85);filter:blur(3px)}
+.row b{display:block;font-weight:400;font-size:16px}
+.row small{display:block;font-size:12.5px;opacity:.72;margin-top:2px}
+.row .meta{margin-left:auto;text-align:right;font-size:12.5px;opacity:.85;white-space:nowrap}
+.row .clear{opacity:.55}
+.presets{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.preset{border-radius:18px;padding:14px 12px 12px;text-align:left;min-height:92px;display:flex;flex-direction:column;justify-content:flex-end;border:1px solid rgba(255,255,255,.25);position:relative;overflow:hidden}
+.preset b{font-family:var(--serif);font-size:15.5px;position:relative}
+.preset small{font-size:12px;opacity:.85;margin-top:3px;position:relative}
+.preset.on{outline:2px solid #fff}
+.credit{font-size:11.5px;opacity:.6;margin:18px 4px 0;line-height:1.6}
+
+/* 낙서 도구 */
+#drawTop,#drawBar{position:fixed;left:0;right:0;opacity:0;pointer-events:none;transition:opacity .4s}
+body.drawing #drawTop,body.drawing #drawBar{opacity:1;pointer-events:auto}
+#drawTop{top:calc(14px + var(--sat));display:flex;align-items:flex-start;justify-content:space-between;padding:0 16px 0 22px}
+#drawTop h2{margin:4px 0 0;font-family:var(--serif);font-size:20px}
+#drawTop p{margin:4px 0 0;font-size:13.5px;opacity:.95}
+.round{width:44px;height:44px;border-radius:50%;background:var(--glass);border:1px solid var(--glass-line);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);display:grid;place-items:center;flex:none}
+.round svg{width:20px;height:20px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round}
+#drawBar{bottom:calc(16px + var(--sab));padding:0 14px}
+.tools{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:22px;background:var(--glass);border:1px solid var(--glass-line);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+.colors{display:flex;gap:7px}
+.dot{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.6)}
+.dot.on{box-shadow:0 0 0 3px rgba(255,255,255,.95)}
+.sizes{display:flex;gap:2px}
+.size{width:30px;height:30px;display:grid;place-items:center;border-radius:10px}
+.size i{display:block;border-radius:50%;background:#fff}
+.size.on{background:rgba(255,255,255,.22)}
+.mini{display:flex;gap:2px}
+.mini button{width:34px;height:34px;display:grid;place-items:center;border-radius:10px}
+.mini svg{width:19px;height:19px;stroke:#fff;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.acts{display:flex;gap:8px;margin-top:10px}
+.acts button{flex:1;padding:14px 8px;border-radius:18px;font-size:15px}
+.ghost{background:var(--glass);border:1px solid var(--glass-line)!important;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+.solid{background:#fff;color:var(--ink);font-weight:700}
+
+/* 시작 화면 */
+#intro{position:fixed;inset:0;display:flex;flex-direction:column;justify-content:flex-end;padding:0 26px calc(40px + var(--sab));background:linear-gradient(to top,rgba(24,36,70,.42),rgba(24,36,70,0) 55%);transition:opacity .9s ease}
+#intro.gone{opacity:0;pointer-events:none}
+#intro h1{font-family:var(--serif);font-size:62px;font-weight:700;letter-spacing:-.03em;margin:0;line-height:1}
+#intro p{font-size:16px;line-height:1.7;margin:16px 0 30px;max-width:22em}
+#intro .solid{padding:17px;border-radius:20px;font-size:17px;width:100%;max-width:420px}
+#intro small{display:block;margin-top:12px;font-size:12.5px;opacity:.8}
+
+#toast{position:fixed;left:50%;bottom:calc(112px + var(--sab));transform:translate(-50%,16px);max-width:calc(100% - 32px);padding:12px 16px;border-radius:18px;background:var(--sheet);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);font-size:14px;line-height:1.5;opacity:0;pointer-events:none;transition:.35s;display:flex;align-items:center;gap:12px}
+#toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#toast button{flex:none;padding:7px 12px;border-radius:12px;background:#fff;color:var(--ink);font-size:13px}
+#nogl{position:fixed;inset:0;display:none;place-items:center;padding:30px;text-align:center;background:#6f97c6;font-size:15px;line-height:1.7}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01s!important}}
+</style>
+</head>
+<body class="demo">
+<canvas id="sky"></canvas>
+<canvas id="floatLayer"></canvas>
+<canvas id="drawLayer"></canvas>
+
+<header id="place" class="shadowtext">
+  <h1 id="placeName">제주 한라산</h1>
+  <p id="placeLine">하늘을 불러오는 중이에요.</p>
+  <div id="demoTag">미리보기용 예시 날씨예요</div>
+</header>
+
+<nav id="dock" aria-label="메뉴">
+  <button id="btnSky" aria-label="하늘 고르기">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 3.8 5.8 3.8 9s-1.2 6.4-3.8 9c-2.6-2.6-3.8-5.8-3.8-9S9.4 5.6 12 3z"/></svg>
+    <span>하늘 고르기</span>
+  </button>
+  <button id="btnView" aria-label="시점 바꾸기">
+    <svg viewBox="0 0 24 24" id="viewIcon"><path d="M3 17c3-6 15-6 18 0"/><path d="M12 7V3M7.5 8.5 5.5 5.5M16.5 8.5l2-3"/></svg>
+    <span id="viewLabel">누워서 보기</span>
+  </button>
+  <button id="btnDraw" aria-label="구름 낙서">
+    <svg viewBox="0 0 24 24"><path d="M4 20c1.5-.2 2.6-.7 3.4-1.5L19 7a2.1 2.1 0 0 0-3-3L4.5 15.6C3.7 16.4 3.2 17.5 3 19z"/><path d="M14 6l3 3"/></svg>
+    <span>구름 낙서</span>
+  </button>
+</nav>
+
+<div id="scrim"></div>
+<section id="sheet" aria-label="하늘 고르기">
+  <div class="grab"></div>
+  <h2>세계의 지금 하늘</h2>
+  <div id="cityList"></div>
+  <h2>기분대로 고르는 하늘</h2>
+  <div class="presets" id="presetList"></div>
+  <p class="credit" id="credit">날씨 정보는 노르웨이 기상청(MET Norway) 데이터로, 30분마다 새로 받아와요. 구름 모양은 그 날씨에 맞춰 이 기기에서 그려져요.<br>© 2026 아이디어믹스랩. All rights reserved.</p>
+</section>
+
+<div id="drawTop" class="shadowtext">
+  <div>
+    <h2>구름 낙서</h2>
+    <p>구름이 멈췄어요. 떠오르는 모양을 그려보세요.</p>
+  </div>
+  <button class="round" id="btnDrawClose" aria-label="낙서 그만하기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+</div>
+<div id="drawBar">
+  <div class="tools">
+    <div class="colors" id="colors"></div>
+    <div class="sizes" id="sizes"></div>
+    <div class="mini">
+      <button id="btnUndo" aria-label="되돌리기"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+      <button id="btnClear" aria-label="모두 지우기"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13"/></svg></button>
+    </div>
+  </div>
+  <div class="acts">
+    <button class="ghost" id="btnSave">사진으로 저장</button>
+    <button class="solid" id="btnRelease">구름에 실어 보내기</button>
+  </div>
+</div>
+
+<section id="intro" class="shadowtext">
+  <h1>구름멍</h1>
+  <p>세계 곳곳의 지금 하늘을 가만히 올려다봐요.<br>마음에 드는 구름에는 낙서도 남겨보세요.</p>
+  <button class="solid" id="btnStart">하늘 보러 가기</button>
+</section>
+
+<div id="toast" role="status"><span id="toastText"></span><button id="toastBtn" hidden></button></div>
+<div id="nogl">이 기기에서는 하늘을 그릴 수 없어요.<br>최신 브라우저에서 다시 열어주세요.</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ───────── 설정 ───────── */
+// Vercel에 함께 올리는 api/sky.js 주소. 앱인토스로 포장할 때는 전체 주소(https://...vercel.app/api/sky)로 바꿔주세요.
+const SKY_API = '/api/sky';
+const REFRESH_MIN = 30;
+
+const CITIES = [
+  {id:'jeju',      name:'제주 한라산',        lat:33.36,  lon:126.53,  tz:'Asia/Seoul'},
+  {id:'seoul',     name:'서울 남산',          lat:37.55,  lon:126.99,  tz:'Asia/Seoul'},
+  {id:'gwangju',   name:'광주 무등산',        lat:35.13,  lon:126.99,  tz:'Asia/Seoul'},
+  {id:'busan',     name:'부산 해운대',        lat:35.16,  lon:129.16,  tz:'Asia/Seoul'},
+  {id:'tokyo',     name:'도쿄',              lat:35.68,  lon:139.77,  tz:'Asia/Tokyo'},
+  {id:'london',    name:'런던 템스강',        lat:51.51,  lon:-0.12,   tz:'Europe/London'},
+  {id:'paris',     name:'파리 에펠탑',        lat:48.86,  lon:2.29,    tz:'Europe/Paris'},
+  {id:'alps',      name:'스위스 알프스',       lat:46.54,  lon:7.96,    tz:'Europe/Zurich'},
+  {id:'reykjavik', name:'아이슬란드 레이캬비크', lat:64.15,  lon:-21.94,  tz:'Atlantic/Reykjavik'},
+  {id:'newyork',   name:'뉴욕 센트럴파크',     lat:40.78,  lon:-73.97,  tz:'America/New_York'},
+  {id:'honolulu',  name:'하와이 와이키키',     lat:21.28,  lon:-157.83, tz:'Pacific/Honolulu'},
+  {id:'queenstown',name:'뉴질랜드 퀸스타운',   lat:-45.03, lon:168.66,  tz:'Pacific/Auckland'}
+];
+
+const PRESETS = [
+  {id:'cumulus', name:'대낮 뭉게구름', desc:'한여름 오후, 파란 하늘에 뭉게구름이 피어올라요.', alt:55, az:190, cov:[.42,.05,.2], wind:4.5, windFrom:250, rain:0,
+   bg:'linear-gradient(160deg,#3c80d8,#a9cdee)'},
+  {id:'sunset',  name:'노을 구름',     desc:'해가 막 넘어가요. 구름 가장자리가 분홍빛으로 물들어요.', alt:1.2, az:280, cov:[.28,.34,.45], wind:3, windFrom:210, rain:0,
+   bg:'linear-gradient(160deg,#4a6db3,#f2a58c)'},
+  {id:'moon',    name:'달빛 밤구름',   desc:'별 사이로 밤구름이 천천히 달을 스치고 지나가요.', alt:-26, az:300, cov:[.36,.18,.1], wind:3, windFrom:270, rain:0,
+   bg:'linear-gradient(160deg,#0c1432,#2a3764)'},
+  {id:'rain',    name:'비 내리는 먹구름', desc:'묵직한 구름 아래로 빗줄기가 내려요.', alt:30, az:180, cov:[.95,.7,.3], wind:7, windFrom:230, rain:.8,
+   bg:'linear-gradient(160deg,#59606d,#9aa3ae)'}
+];
+
+const PENS = ['#2b2f3a','#ffffff','#f59bb0','#ffd76a','#6fb7f2'];
+const SIZES = [3,6,12];
+
+/* ───────── 저장된 설정 ───────── */
+const store = {
+  get(k,d){ try{ const v = localStorage.getItem('gureum:'+k); return v===null?d:JSON.parse(v); }catch(e){ return d; } },
+  set(k,v){ try{ localStorage.setItem('gureum:'+k, JSON.stringify(v)); }catch(e){} }
+};
+
+/* ───────── 상태 ───────── */
+const S = {
+  mode: store.get('mode','live'),
+  cityId: store.get('city','jeju'),
+  presetId: store.get('preset','cumulus'),
+  view: store.get('view','horizon'),
+  weather: {}, demo: true,
+  drawing: false, sheet: false,
+  started: false,
+  off: {L:[0,0], M:[0,0], H:[0,0]},
+  evo: 0, clock: 0,
+  pitch: 0, pitchFrom: 0, pitchTo: 0, pitchT: 1,
+  yaw: 0,
+  env: null
+};
+if(!CITIES.find(c=>c.id===S.cityId)) S.cityId='jeju';
+if(!PRESETS.find(p=>p.id===S.presetId)) S.presetId='cumulus';
+const PITCH = {horizon: 0.64, zenith: 1.5707};
+const TANF = 0.72, TANZ = 1.3;
+function tanF(){ const k = clamp((S.pitch-0.64)/(1.5707-0.64),0,1); return lerp(TANF, TANZ, k); }
+S.pitch = S.pitchTo = PITCH[S.view];
+
+/* ───────── 유틸 ───────── */
+const $ = s => document.querySelector(s);
+const clamp = (x,a,b) => Math.min(b, Math.max(a, x));
+const lerp = (a,b,t) => a + (b-a)*t;
+const smooth = (a,b,x) => { const t = clamp((x-a)/(b-a),0,1); return t*t*(3-2*t); };
+const D2R = Math.PI/180;
+function hasBatchim(word){ const c = word.charCodeAt(word.length-1); if(c<0xac00||c>0xd7a3) return false; return (c-0xac00)%28!==0; }
+function eunNeun(w){ return w + (hasBatchim(w)?'은':'는'); }
+function ieyo(w){ return w + (hasBatchim(w)?'이에요':'예요'); }
+function hashStr(s){ let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return (h>>>0)/4294967295; }
+
+/* ───────── 태양 위치 ───────── */
+function sunPos(date, lat, lon){
+  const d = date.getTime()/86400000 + 2440587.5 - 2451545.0;
+  const g = (357.529 + 0.98560028*d)*D2R;
+  const q = 280.459 + 0.98564736*d;
+  const L = (q + 1.915*Math.sin(g) + 0.020*Math.sin(2*g))*D2R;
+  const e = (23.439 - 0.00000036*d)*D2R;
+  const ra = Math.atan2(Math.cos(e)*Math.sin(L), Math.cos(L));
+  const dec = Math.asin(Math.sin(e)*Math.sin(L));
+  const gmst = (18.697374558 + 24.06570982441908*d) % 24;
+  const H = ((gmst*15 + lon)*D2R) - ra;
+  const la = lat*D2R;
+  const alt = Math.asin(Math.sin(la)*Math.sin(dec) + Math.cos(la)*Math.cos(dec)*Math.cos(H));
+  const az = Math.atan2(-Math.sin(H)*Math.cos(dec), Math.cos(la)*Math.sin(dec) - Math.sin(la)*Math.cos(dec)*Math.cos(H));
+  return {alt: alt/D2R, az: ((az/D2R)+360)%360};
+}
+
+/* ───────── 하늘 색 ───────── */
+const KEYS = [
+  {a:-18, top:[8,13,36],   hor:[22,30,60],    lit:[74,86,118],   shade:[26,32,54],   sun:[0,0,0],       ground:[7,9,18]},
+  {a:-8,  top:[20,30,76],  hor:[74,72,122],   lit:[112,106,150], shade:[42,42,72],   sun:[70,50,90],    ground:[14,15,30]},
+  {a:-2,  top:[40,62,128], hor:[236,140,122], lit:[246,168,160], shade:[92,82,122],  sun:[255,118,92],   ground:[30,26,42]},
+  {a:4,   top:[62,108,190],hor:[250,188,142], lit:[255,214,182], shade:[142,124,150],sun:[255,168,110],  ground:[44,46,54]},
+  {a:15,  top:[56,118,210],hor:[170,204,238], lit:[255,249,241], shade:[160,168,190],sun:[255,228,188],  ground:[54,74,66]},
+  {a:45,  top:[40,108,214],hor:[166,205,240], lit:[255,255,255], shade:[164,176,198],sun:[255,244,224],  ground:[58,82,70]}
+];
+function skyColors(alt, oc, rain){
+  let i=0; while(i<KEYS.length-2 && alt>KEYS[i+1].a) i++;
+  const A=KEYS[i], B=KEYS[i+1];
+  const t = clamp((alt-A.a)/(B.a-A.a),0,1);
+  const out = {};
+  for(const k of ['top','hor','lit','shade','sun','ground']){
+    let c = A[k].map((v,j)=>lerp(v,B[k][j],t)/255);
+    if(k!=='sun' && k!=='ground'){
+      const lum = c[0]*.3+c[1]*.59+c[2]*.11;
+      const grey = [lum*.95, lum*.98, lum*1.05];
+      const amt = oc*(k==='lit'?0.55:0.8);
+      c = c.map((v,j)=>lerp(v,grey[j],amt)*(1-rain*0.28));
+    }
+    out[k]=c;
+  }
+  out.sun = out.sun.map(v=>v*(1-oc*0.85));
+  out.ground = out.ground.map(v=>v*(1-oc*0.35));
+  return out;
+}
+function css(c){ return 'rgb('+c.map(v=>Math.round(clamp(v,0,1)*255)).join(',')+')'; }
+
+/* ───────── 환경 계산 ───────── */
+function cityWeather(id){ return S.weather[id] || null; }
+function computeEnv(){
+  let alt, az, cov, wind, windFrom, rain, total;
+  if(S.mode==='preset'){
+    const p = PRESETS.find(x=>x.id===S.presetId);
+    alt=p.alt; az=p.az; cov=p.cov.slice(); wind=p.wind; windFrom=p.windFrom; rain=p.rain;
+  } else {
+    const c = CITIES.find(x=>x.id===S.cityId);
+    const sp = sunPos(new Date(), c.lat, c.lon); alt=sp.alt; az=sp.az;
+    const w = cityWeather(c.id) || {low:30,mid:10,high:20,wind:3,windFrom:270,precip:0};
+    cov=[w.low/100, w.mid/100, w.high/100]; wind=w.wind; windFrom=w.windFrom;
+    rain = w.precip>0.05 ? clamp(w.precip/2,0.35,1) : 0;
+    if(w.symbol && /snow|sleet/.test(w.symbol)) rain = 0;
+  }
+  total = 1 - (1-cov[0])*(1-cov[1]*.8)*(1-cov[2]*.5);
+  const oc = Math.max(clamp((cov[0]-0.62)/0.33,0,1), rain*0.9);
+  const col = skyColors(alt, oc, rain);
+  const sunVis = (1-oc*0.9)*smooth(-4,1,alt);
+  const night = smooth(-4,-12,alt);
+  const windTo = ((windFrom+180)%360)*D2R;
+  const spd = Math.max(1.2, wind)*2.2*0.0042;
+  const sunV = [Math.sin(az*D2R)*Math.cos(alt*D2R), Math.sin(alt*D2R), Math.cos(az*D2R)*Math.cos(alt*D2R)];
+  const maz = (az+180)*D2R, malt = 45*D2R;
+  const moonV = [Math.sin(maz)*Math.cos(malt), Math.sin(malt), Math.cos(maz)*Math.cos(malt)];
+  // 창밖 시점의 방향: 해가 낮으면 해 쪽을, 아니면 구름이 옆으로 흐르게
+  let yaw = windTo - Math.PI/2 + 0.5;
+  if(alt>-8 && alt<18 && S.mode==='live') yaw = az*D2R - 0.35;
+  if(S.mode==='preset' && S.presetId==='sunset') yaw = az*D2R - 0.3;
+  if(alt < -8) yaw = maz - 0.25;
+  S.env = {alt, az, cov:cov.map(v=>clamp(v,0,0.97)), rain, total, oc, col, sunVis, night, windTo, spd, sunV, moonV, yaw, wind, windFrom};
+  S.yaw = yaw;
+  document.querySelector('meta[name=theme-color]').setAttribute('content', css(col.top));
+  document.body.style.background = css(col.hor);
+}
+
+/* ───────── WebGL 하늘 ───────── */
+const VERT = 'attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}';
+const FRAG = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform vec2 uRes;
+uniform float uPitch, uYaw, uTanF, uNight, uRain, uEvo, uClock, uSunVis;
+uniform vec3 uSun, uMoon, uSkyTop, uSkyHor, uSunCol, uLit, uShade, uGround, uCov;
+uniform vec2 uOffL, uOffM, uOffH, uWindDir;
+
+float h12(vec2 p){ vec3 p3=fract(vec3(p.xyx)*.1031); p3+=dot(p3,p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
+vec2 h22(vec2 p){ vec3 p3=fract(vec3(p.xyx)*vec3(.1031,.1030,.0973)); p3+=dot(p3,p3.yzx+33.33); return fract((p3.xx+p3.yz)*p3.zy); }
+float vn(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.-2.*f);
+  return mix(mix(h12(i),h12(i+vec2(1.,0.)),u.x), mix(h12(i+vec2(0.,1.)),h12(i+vec2(1.,1.)),u.x), u.y); }
+const mat2 R = mat2(1.6,1.2,-1.2,1.6);
+float fbm5(vec2 p){ float s=0., a=.5; for(int i=0;i<5;i++){ s+=a*vn(p); p=R*p; a*=.5; } return s; }
+float fbm3(vec2 p){ float s=0., a=.5; for(int i=0;i<3;i++){ s+=a*vn(p); p=R*p; a*=.5; } return s*1.14; }
+
+float cfield(vec2 xz){
+  vec2 q = (xz - uOffL)*1.35;
+  float w = vn(q*.5 + vec2(uEvo*.03, -uEvo*.02));
+  q += vec2(w, -w)*.3;
+  float base = fbm3(q*.55 + vec2(uEvo*.01, 0.));
+  float det = fbm5(q*2.1 + vec2(0., uEvo*.02));
+  return base + (det - .5)*.46;
+}
+vec4 cumulus(vec3 dir, float m){
+  float e = dir.y;
+  float hb = 1., ht = 1.8;
+  float t0 = hb/e, t1 = min(ht/e, t0 + 3.);
+  float th = mix(.74, .36, uCov.x);
+  float dt = (t1 - t0)/12.;
+  float jit = .5 + (h12(gl_FragCoord.xy*.71) - .5)*.38;
+  vec4 acc = vec4(0.);
+  for(int i=0;i<12;i++){
+    float t = t0 + (float(i)+jit)*dt;
+    vec3 P = dir*t;
+    float n = cfield(P.xz);
+    float hc = (n - th)/(1. - th);
+    if(hc > 0.){
+      float top = hb + sqrt(hc)*(ht-hb)*.95;
+      float dens = smoothstep(0., .16, top - P.y);
+      if(dens > 0.){
+        float light = exp(-max(top - P.y, 0.)*2.1)*(.75 + .25*smoothstep(0., .25, P.y - hb + .05));
+        vec3 c = mix(uShade, uLit, clamp(light*1.1 + .2, 0., 1.));
+        float a = dens*.6;
+        acc.rgb += (1. - acc.a)*c*a;
+        acc.a += (1. - acc.a)*a;
+        if(acc.a > .97) break;
+      }
+    }
+  }
+  if(acc.a < .003) return vec4(0.);
+  vec3 c = acc.rgb/acc.a;
+  c += uSunCol*pow(m,5.)*.7*uSunVis*clamp(acc.a*(1.-acc.a)*4.,0.,1.);
+  return vec4(c, acc.a);
+}
+float alto(vec2 pos){
+  vec2 q=(pos - uOffM)*2.6;
+  vec2 ip=floor(q), fp=fract(q); float md=8.;
+  for(int j=-1;j<=1;j++){ for(int i=-1;i<=1;i++){
+    vec2 g=vec2(float(i),float(j)); vec2 o=h22(ip+g);
+    o=.5+.38*sin(uEvo*.07+6.2831*o);
+    md=min(md, length(g+o-fp));
+  }}
+  float cell = smoothstep(.66, .12, md);
+  float mask = fbm3((pos - uOffM)*.45);
+  float th = mix(.74,.26,uCov.y);
+  return cell*smoothstep(th, th+.2, mask)*(.55+.45*vn(q*2.3));
+}
+float cirrus(vec2 pos){
+  vec2 wd = uWindDir;
+  vec2 q = (pos - uOffH);
+  q = vec2(dot(q,wd), dot(q,vec2(-wd.y,wd.x)));
+  q *= vec2(.22, 1.5);
+  q.y += (vn(q*vec2(.35,.25) + 4.) - .5)*2.2;
+  q.x += (vn(q*vec2(.2,.6) + 9.) - .5)*1.5;
+  float n = fbm3(q + vec2(uEvo*.01,0.));
+  float th = mix(.78,.36,uCov.z);
+  float d = smoothstep(th, th+.28, n);
+  float streak = .45 + .55*vn(q*vec2(.6,7.));
+  return d*streak*.46;
+}
+
+void main(){
+  vec2 p = (gl_FragCoord.xy - .5*uRes)/(.5*uRes.y);
+  float cp=cos(uPitch), sp=sin(uPitch), cy=cos(uYaw), sy=sin(uYaw);
+  vec3 fw=vec3(sy*cp, sp, cy*cp), rt=vec3(cy,0.,-sy), up=vec3(-sy*sp, cp, -cy*sp);
+  vec3 dir = normalize(fw + (p.x*rt + p.y*up)*uTanF);
+  float e = dir.y;
+  float mu = dot(dir, uSun);
+
+  vec3 col = mix(uSkyHor, uSkyTop, pow(clamp(e,0.,1.), .55));
+  float m = max(mu,0.);
+  col += uSunCol*(pow(m,14.)*.16 + pow(m,180.)*.45)*uSunVis;
+  col += uSunCol*exp(-max(e,0.)*7.)*pow(mu*.5+.5,3.)*.28*uSunVis;
+  col = mix(col, vec3(1.,.985,.94), smoothstep(.99935,.9997,mu)*uSunVis*(1.-uNight));
+
+  if(uNight > .01 && e > 0.){
+    vec3 sd = dir*170.; vec3 cell = floor(sd);
+    float hs = h12(cell.xy*.37 + cell.z*1.71 + 3.1);
+    float st = smoothstep(.34,.0,length(fract(sd)-.5))*step(.993,hs);
+    col += vec3(.95,.97,1.)*st*uNight*1.3*(.6+.4*sin(uClock*1.7+hs*90.))*smoothstep(0.,.2,e);
+    float mm = dot(dir, uMoon);
+    col += vec3(.86,.9,1.)*(smoothstep(.99955,.99975,mm)*.95 + pow(max(mm,0.),220.)*.3 + pow(max(mm,0.),10.)*.05)*uNight;
+  }
+
+  if(e > 0.){
+    float fadeH = smoothstep(0., .1, e);
+    if(uCov.z > .02){
+      float t = 6./e;
+      float d = cirrus(dir.xz*t)*fadeH*exp(-t*.004);
+      vec3 cc = mix(uLit, uSkyHor, .2) + uSunCol*pow(m,4.)*.35*uSunVis;
+      col = mix(col, cc, d);
+    }
+    if(uCov.y > .02){
+      float t = 2.5/e;
+      float d = alto(dir.xz*t)*fadeH*exp(-t*.012);
+      vec3 cc = mix(uLit, uShade, .32) + uSunCol*pow(m,5.)*.3*uSunVis;
+      cc = mix(cc, uSkyHor, clamp(t*.012,0.,.5));
+      col = mix(col, cc, d*.92);
+    }
+    float deck = smoothstep(.72, .95, uCov.x);
+    if(deck > .001){
+      float t = 1.02/e;
+      float v = fbm3((dir.xz*t - uOffL)*.8);
+      vec3 dc = mix(uShade, uLit, .28 + v*.3);
+      dc = mix(dc, uSkyHor, clamp(t*.03, 0., .55));
+      col = mix(col, dc, deck*fadeH*(.86 + .14*v));
+    }
+    if(uCov.x > .02){
+      float t = 1./e;
+      vec4 c = cumulus(dir, m);
+      float a = c.a*fadeH*exp(-t*.028);
+      vec3 cc = mix(c.rgb, uSkyHor, clamp(t*.022,0.,.6));
+      col = mix(col, cc, a*.97);
+    }
+  }
+
+  if(uRain > .01){
+    vec2 r = gl_FragCoord.xy/uRes.y; r.x += r.y*.16;
+    float colm = floor(r.x*150.);
+    float hs = h12(vec2(colm, 1.7));
+    float y = fract(r.y*1.3 + uClock*(1.5+hs) + hs*10.);
+    float fx = fract(r.x*150.);
+    float s = smoothstep(0.,.03,y)*smoothstep(.16,.03,y)*smoothstep(.5,.1,abs(fx-.5))*step(.5,hs);
+    col = mix(col, vec3(.88,.92,.96), s*.26*uRain);
+  }
+
+  col += (h12(gl_FragCoord.xy + fract(uClock)*97.)-.5)/255.;
+  gl_FragColor = vec4(col, 1.);
+}`;
+
+const skyC = $('#sky');
+const gl = skyC.getContext('webgl', {antialias:false, alpha:false, depth:false, stencil:false, preserveDrawingBuffer:false});
+let U = {}, glOK = !!gl;
+function initGL(){
+  function sh(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+    if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+  const pr = gl.createProgram();
+  gl.attachShader(pr, sh(gl.VERTEX_SHADER, VERT));
+  gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FRAG));
+  gl.linkProgram(pr);
+  if(!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
+  gl.useProgram(pr);
+  const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(pr,'a'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+  ['uRes','uPitch','uYaw','uTanF','uNight','uRain','uEvo','uClock','uSunVis','uSun','uMoon','uSkyTop','uSkyHor','uSunCol','uLit','uShade','uGround','uCov','uOffL','uOffM','uOffH','uWindDir']
+    .forEach(n=>U[n]=gl.getUniformLocation(pr,n));
+}
+try{ if(glOK) initGL(); }catch(err){ console.error(err); glOK=false; }
+if(!glOK){ $('#nogl').style.display='grid'; }
+
+let renderScale = 0.6, W=0, H=0, DPR=1;
+function sizeGL(scale){
+  skyC.width = Math.max(2, Math.round(W*scale));
+  skyC.height = Math.max(2, Math.round(H*scale));
+}
+function resize(){
+  W = innerWidth; H = innerHeight; DPR = Math.min(devicePixelRatio||1, 2);
+  sizeGL(renderScale);
+  for(const c of [floatC, drawC]){ c.width = Math.round(W*DPR); c.height = Math.round(H*DPR); }
+  redrawStrokes();
+}
+function render(){
+  if(!glOK || !S.env) return;
+  const E = S.env, C = E.col;
+  gl.viewport(0,0,skyC.width,skyC.height);
+  gl.uniform2f(U.uRes, skyC.width, skyC.height);
+  gl.uniform1f(U.uPitch, S.pitch); gl.uniform1f(U.uYaw, S.yaw); gl.uniform1f(U.uTanF, tanF());
+  gl.uniform1f(U.uNight, E.night); gl.uniform1f(U.uRain, E.rain); gl.uniform1f(U.uEvo, S.evo);
+  gl.uniform1f(U.uClock, S.clock); gl.uniform1f(U.uSunVis, E.sunVis);
+  gl.uniform3fv(U.uSun, E.sunV); gl.uniform3fv(U.uMoon, E.moonV);
+  gl.uniform3fv(U.uSkyTop, C.top); gl.uniform3fv(U.uSkyHor, C.hor); gl.uniform3fv(U.uSunCol, C.sun);
+  gl.uniform3fv(U.uLit, C.lit); gl.uniform3fv(U.uShade, C.shade); gl.uniform3fv(U.uGround, C.ground);
+  gl.uniform3fv(U.uCov, E.cov);
+  gl.uniform2fv(U.uOffL, S.off.L); gl.uniform2fv(U.uOffM, S.off.M); gl.uniform2fv(U.uOffH, S.off.H);
+  gl.uniform2f(U.uWindDir, Math.sin(E.windTo), Math.cos(E.windTo));
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+/* ───────── 카메라 투영 (낙서가 구름을 따라가게) ───────── */
+function camBasis(){
+  const cp=Math.cos(S.pitch), sp=Math.sin(S.pitch), cy=Math.cos(S.yaw), sy=Math.sin(S.yaw);
+  return {fw:[sy*cp, sp, cy*cp], rt:[cy,0,-sy], up:[-sy*sp, cp, -cy*sp]};
+}
+const dot3 = (a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+function unproject(x, y){ // 화면 좌표(CSS px) → 낮은 구름층(높이 1) 위의 점
+  const B = camBasis();
+  const px = (x - W/2)/(H/2), py = -(y - H/2)/(H/2);
+  const tf=tanF(); let d = [0,1,2].map(i=>B.fw[i] + (px*B.rt[i] + py*B.up[i])*tf);
+  const l = Math.hypot(d[0],d[1],d[2]); d = d.map(v=>v/l);
+  const dy = Math.max(d[1], 0.06);
+  return [d[0]/dy, d[2]/dy];
+}
+function project(wx, wz){
+  const B = camBasis(); const v=[wx,1,wz];
+  const cf = dot3(v,B.fw); if(cf < 0.05) return null;
+  const tf=tanF(); const sx = dot3(v,B.rt)/cf/tf, sy = dot3(v,B.up)/cf/tf;
+  return {x: W/2 + sx*H/2, y: H/2 - sy*H/2, cf};
+}
+
+/* ───────── 날씨 불러오기 ───────── */
+function demoWeather(){
+  const hour = Math.floor(Date.now()/3600000), out={};
+  for(const c of CITIES){
+    const r = k => hashStr(c.id+':'+hour+':'+k);
+    const low = Math.round(r(1)*85), mid = Math.round(r(2)*50), high = Math.round(r(3)*60);
+    out[c.id] = {low, mid, high, total: Math.round(100*(1-(1-low/100)*(1-mid/100)*(1-high/100))),
+      wind: +(1+r(4)*8).toFixed(1), windFrom: Math.round(r(5)*360), precip: (low>70 && r(6)>.6)? 1.2:0, symbol:''};
+  }
+  return out;
+}
+let firstVisit = store.get('city', null) === null;
+function cloudiest(preferDay){
+  let best=null, bs=-1;
+  for(const c of CITIES){ const w=cityWeather(c.id); if(!w) continue;
+    const day = sunPos(new Date(), c.lat, c.lon).alt > -2;
+    const sc = w.total*(w.precip>0.05?0.6:1) + (preferDay&&day?60:0);
+    if(sc>bs){ bs=sc; best=c; } }
+  return best && best.id;
+}
+async function loadWeather(){
+  let ok=false;
+  try{
+    const ctl = new AbortController(); const to = setTimeout(()=>ctl.abort(), 8000);
+    const r = await fetch(SKY_API, {signal: ctl.signal, cache:'no-store'}); clearTimeout(to);
+    if(r.ok){ const j = await r.json(); if(j && j.cities){
+      const good = {}; for(const k in j.cities) if(j.cities[k]) good[k]=j.cities[k];
+      if(Object.keys(good).length){ S.weather = good; ok=true; } } }
+  }catch(e){}
+  if(!ok){ S.weather = demoWeather(); }
+  S.demo = !ok; document.body.classList.toggle('demo', S.demo);
+  if(firstVisit){ firstVisit=false; S.cityId = cloudiest(true) || S.cityId; seedOffsets(); }
+  computeEnv(); updateText(); buildCities();
+}
+
+/* ───────── 문장 ───────── */
+const DIRS = ['북','북동','동','남동','남','남서','서','북서'];
+function windPhrase(spd, from){
+  const d = DIRS[Math.round(((from%360)+360)%360/45)%8];
+  if(spd < 1.5) return '바람이 잔잔해요';
+  if(spd < 4.5) return d+'풍이 살랑 불어요';
+  if(spd < 9) return d+'풍이 불어요';
+  return d+'풍이 세게 불어요';
+}
+function coverPhrase(w){
+  if(w.precip > 0.05) return /snow|sleet/.test(w.symbol||'') ? '눈이 내리고 있어요' : '비가 내리고 있어요';
+  const t = w.total;
+  if(t < 12) return '구름 없이 맑아요';
+  if(t < 35) return '구름이 조금 떠 있어요';
+  if(t < 65) return '구름이 적당히 떠 있어요';
+  if(t < 88) return '구름이 많아요';
+  return '하늘이 구름으로 덮여 있어요';
+}
+function localTime(tz){
+  try{ return new Intl.DateTimeFormat('ko-KR',{timeZone:tz, hour:'numeric', minute:'2-digit'}).format(new Date()); }catch(e){ return ''; }
+}
+function updateText(){
+  if(S.mode==='preset'){
+    const p = PRESETS.find(x=>x.id===S.presetId);
+    $('#placeName').textContent = p.name; $('#placeLine').textContent = p.desc;
+    document.body.classList.remove('demo');
+    return;
+  }
+  document.body.classList.toggle('demo', S.demo);
+  const c = CITIES.find(x=>x.id===S.cityId), w = cityWeather(c.id);
+  $('#placeName').textContent = c.name;
+  if(!w){ $('#placeLine').textContent = '하늘을 불러오는 중이에요.'; return; }
+  $('#placeLine').textContent = '지금 '+localTime(c.tz)+'. '+coverPhrase(w)+'. '+windPhrase(w.wind, w.windFrom)+'.';
+}
+
+/* ───────── 시트 목록 ───────── */
+function buildCities(){
+  const box = $('#cityList'); box.innerHTML='';
+  for(const c of CITIES){
+    const w = cityWeather(c.id); const sp = sunPos(new Date(), c.lat, c.lon);
+    const oc = w? clamp((w.low/100-0.62)/0.33,0,1):0;
+    const col = skyColors(sp.alt, oc, w && w.precip>0.05 ? .6 : 0);
+    const clear = w && w.total < 12;
+    const b = document.createElement('button');
+    b.className = 'row' + (S.mode==='live' && S.cityId===c.id ? ' on':'');
+    const cloudOpacity = w ? clamp(w.total/100,0,1) : 0;
+    b.innerHTML = '<span class="swatch" style="background:linear-gradient(180deg,'+css(col.top)+','+css(col.hor)+')"><i style="opacity:'+cloudOpacity.toFixed(2)+'"></i></span>'+
+      '<span><b></b><small></small></span><span class="meta'+(clear?' clear':'')+'"></span>';
+    b.querySelector('b').textContent = c.name;
+    b.querySelector('small').textContent = localTime(c.tz);
+    b.querySelector('.meta').textContent = !w ? '' : clear ? '지금은 맑음' : (w.precip>0.05 ? '비 · ' : '구름 ') + w.total + '%';
+    b.addEventListener('click', ()=>chooseCity(c.id));
+    box.appendChild(b);
+  }
+}
+function buildPresets(){
+  const box = $('#presetList'); box.innerHTML='';
+  for(const p of PRESETS){
+    const b = document.createElement('button');
+    b.className = 'preset' + (S.mode==='preset' && S.presetId===p.id ? ' on':'');
+    b.style.background = p.bg;
+    b.innerHTML = '<b></b><small></small>';
+    b.querySelector('b').textContent = p.name;
+    b.querySelector('small').textContent = p.desc.split('.')[0];
+    b.addEventListener('click', ()=>choosePreset(p.id));
+    box.appendChild(b);
+  }
+}
+function seedOffsets(){
+  const id = S.mode==='live' ? S.cityId : S.presetId;
+  const a = hashStr(id+':a')*200, b = hashStr(id+':b')*200;
+  S.off = {L:[a,b], M:[b*1.3,a*0.7], H:[a*0.6,b*1.1]};
+}
+function transition(fn){
+  skyC.classList.add('fade');
+  setTimeout(()=>{ fn(); seedOffsets(); sprites.length=0; computeEnv(); updateText(); skyC.classList.remove('fade'); }, 650);
+}
+function chooseCity(id){
+  closeSheet();
+  const w = cityWeather(id);
+  transition(()=>{ S.mode='live'; S.cityId=id; store.set('mode','live'); store.set('city',id); });
+  if(w && w.total < 12){
+    let best=null; for(const c of CITIES){ const x=cityWeather(c.id); if(x && (!best || x.total>cityWeather(best.id).total)) best=c; }
+    const name = CITIES.find(c=>c.id===id).name;
+    if(best && best.id!==id) toast(eunNeun('지금 '+name+' 하늘') +' 맑아요. 구름이 가장 많은 곳은 '+ieyo(best.name), best.name.split(' ')[0]+' 가기', ()=>chooseCity(best.id));
+  }
+}
+function choosePreset(id){
+  closeSheet();
+  transition(()=>{ S.mode='preset'; S.presetId=id; store.set('mode','preset'); store.set('preset',id); });
+}
+
+/* ───────── 화면 조작 ───────── */
+let calmTimer=null;
+function wake(){
+  document.body.classList.remove('calm');
+  clearTimeout(calmTimer);
+  calmTimer = setTimeout(()=>{ if(!S.drawing && !S.sheet && S.started) document.body.classList.add('calm'); }, 5000);
+}
+['pointerdown','keydown'].forEach(ev=>addEventListener(ev, wake, {passive:true}));
+
+function openSheet(){ buildCities(); buildPresets(); S.sheet=true; document.body.classList.add('sheet'); }
+function closeSheet(){ S.sheet=false; document.body.classList.remove('sheet'); wake(); }
+$('#btnSky').addEventListener('click', openSheet);
+$('#scrim').addEventListener('click', closeSheet);
+
+function setViewLabel(){
+  $('#viewLabel').textContent = S.view==='horizon' ? '누워서 보기' : '창밖 보기';
+}
+$('#btnView').addEventListener('click', ()=>{
+  S.view = S.view==='horizon' ? 'zenith' : 'horizon'; store.set('view', S.view);
+  S.pitchFrom = S.pitch; S.pitchTo = PITCH[S.view]; S.pitchT = 0; setViewLabel();
+});
+let toastTimer=null;
+function toast(text, btnText, fn){
+  $('#toastText').textContent = text;
+  const b = $('#toastBtn');
+  if(btnText){ b.hidden=false; b.textContent=btnText; b.onclick=()=>{ hideToast(); fn(); }; } else { b.hidden=true; b.onclick=null; }
+  $('#toast').classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, btnText?6500:3200);
+}
+function hideToast(){ $('#toast').classList.remove('show'); }
+
+/* ───────── 낙서 ───────── */
+const drawC = $('#drawLayer'), dctx = drawC.getContext('2d');
+const floatC = $('#floatLayer'), fctx = floatC.getContext('2d');
+let strokes=[], cur=null, pen=PENS[0], size=SIZES[1];
+function buildTools(){
+  const cbox=$('#colors'); PENS.forEach((c,i)=>{ const b=document.createElement('button'); b.className='dot'+(i===0?' on':''); b.style.background=c; b.setAttribute('aria-label','색 '+(i+1));
+    b.onclick=()=>{ pen=c; cbox.querySelectorAll('.dot').forEach(x=>x.classList.remove('on')); b.classList.add('on'); }; cbox.appendChild(b); });
+  const sbox=$('#sizes'); SIZES.forEach((s,i)=>{ const b=document.createElement('button'); b.className='size'+(i===1?' on':''); b.setAttribute('aria-label','굵기 '+(i+1));
+    b.innerHTML='<i style="width:'+(s+3)+'px;height:'+(s+3)+'px"></i>';
+    b.onclick=()=>{ size=s; sbox.querySelectorAll('.size').forEach(x=>x.classList.remove('on')); b.classList.add('on'); }; sbox.appendChild(b); });
+}
+function paintStroke(ctx, st, ox, oy, sc){
+  const P = st.pts; if(!P.length) return;
+  ctx.strokeStyle = st.color; ctx.fillStyle = st.color; ctx.lineWidth = st.size*sc; ctx.lineCap='round'; ctx.lineJoin='round';
+  if(P.length===1){ ctx.beginPath(); ctx.arc((P[0][0]-ox)*sc,(P[0][1]-oy)*sc, st.size*sc/2, 0, 7); ctx.fill(); return; }
+  ctx.beginPath(); ctx.moveTo((P[0][0]-ox)*sc,(P[0][1]-oy)*sc);
+  for(let i=1;i<P.length-1;i++){
+    const mx=(P[i][0]+P[i+1][0])/2, my=(P[i][1]+P[i+1][1])/2;
+    ctx.quadraticCurveTo((P[i][0]-ox)*sc,(P[i][1]-oy)*sc,(mx-ox)*sc,(my-oy)*sc);
+  }
+  const L=P[P.length-1]; ctx.lineTo((L[0]-ox)*sc,(L[1]-oy)*sc); ctx.stroke();
+}
+function redrawStrokes(){
+  dctx.setTransform(1,0,0,1,0,0); dctx.clearRect(0,0,drawC.width,drawC.height);
+  for(const st of strokes) paintStroke(dctx, st, 0, 0, DPR);
+  if(cur) paintStroke(dctx, cur, 0, 0, DPR);
+}
+drawC.addEventListener('pointerdown', e=>{
+  if(!S.drawing) return; drawC.setPointerCapture(e.pointerId);
+  cur = {color:pen, size:size, pts:[[e.clientX,e.clientY]]}; redrawStrokes();
+});
+drawC.addEventListener('pointermove', e=>{
+  if(!cur) return; const L=cur.pts[cur.pts.length-1];
+  if(Math.hypot(e.clientX-L[0], e.clientY-L[1]) < 1.5) return;
+  cur.pts.push([e.clientX,e.clientY]); redrawStrokes();
+});
+const endStroke = ()=>{ if(cur){ strokes.push(cur); cur=null; redrawStrokes(); } };
+drawC.addEventListener('pointerup', endStroke); drawC.addEventListener('pointercancel', endStroke);
+
+function startDrawing(){ S.drawing=true; document.body.classList.add('drawing'); document.body.classList.remove('calm'); hideToast(); }
+function stopDrawing(){ S.drawing=false; strokes=[]; cur=null; redrawStrokes(); document.body.classList.remove('drawing'); wake(); }
+$('#btnDraw').addEventListener('click', startDrawing);
+$('#btnDrawClose').addEventListener('click', stopDrawing);
+$('#btnUndo').addEventListener('click', ()=>{ strokes.pop(); redrawStrokes(); });
+$('#btnClear').addEventListener('click', ()=>{ strokes=[]; redrawStrokes(); });
+
+// 흘려보내기
+const sprites=[];
+function strokesBox(){
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for(const st of strokes) for(const p of st.pts){ x0=Math.min(x0,p[0]-st.size); y0=Math.min(y0,p[1]-st.size); x1=Math.max(x1,p[0]+st.size); y1=Math.max(y1,p[1]+st.size); }
+  return {x0:x0-4,y0:y0-4,x1:x1+4,y1:y1+4};
+}
+$('#btnRelease').addEventListener('click', ()=>{
+  if(!strokes.length){ toast('먼저 구름 위에 무언가를 그려주세요.'); return; }
+  const b = strokesBox(), w=b.x1-b.x0, h=b.y1-b.y0;
+  const img = document.createElement('canvas'); img.width=Math.ceil(w*DPR); img.height=Math.ceil(h*DPR);
+  const ic = img.getContext('2d'); for(const st of strokes) paintStroke(ic, st, b.x0, b.y0, DPR);
+  const cx=(b.x0+b.x1)/2, cy=(b.y0+b.y1)/2;
+  const wp = unproject(cx, cy), pr = project(wp[0], wp[1]);
+  sprites.push({img, w, h, wx:wp[0], wz:wp[1], off0:S.off.L.slice(), cf0: pr?pr.cf:1, age:0});
+  if(sprites.length>6) sprites.shift();
+  S.drawing=false; strokes=[]; cur=null; redrawStrokes(); document.body.classList.remove('drawing'); wake();
+  toast('낙서가 구름을 따라 흘러가요.');
+});
+function drawSprites(dt){
+  fctx.setTransform(1,0,0,1,0,0); fctx.clearRect(0,0,floatC.width,floatC.height);
+  for(let i=sprites.length-1;i>=0;i--){
+    const s = sprites[i]; if(!S.drawing) s.age += dt;
+    const wx = s.wx + (S.off.L[0]-s.off0[0]), wz = s.wz + (S.off.L[1]-s.off0[1]);
+    const p = project(wx, wz);
+    const life = 1 - smooth(40, 70, s.age);
+    if(!p || life<=0 || p.x<-W || p.x>2*W || p.y<-H || p.y>2*H){ sprites.splice(i,1); continue; }
+    const sc = clamp(s.cf0/p.cf, 0.05, 3) * (1 + s.age*0.004);
+    fctx.globalAlpha = life*0.92;
+    fctx.drawImage(s.img, (p.x - s.w*sc/2)*DPR, (p.y - s.h*sc/2)*DPR, s.w*sc*DPR, s.h*sc*DPR);
+  }
+  fctx.globalAlpha = 1;
+}
+
+// 사진으로 저장
+function captionTitle(){
+  if(S.mode==='preset') return PRESETS.find(x=>x.id===S.presetId).name;
+  return CITIES.find(x=>x.id===S.cityId).name + '의 하늘';
+}
+function captionDate(){
+  const opt = {year:'numeric', month:'long', day:'numeric', hour:'numeric', minute:'2-digit'};
+  if(S.mode==='live') opt.timeZone = CITIES.find(x=>x.id===S.cityId).tz;
+  try{ return new Intl.DateTimeFormat('ko-KR', opt).format(new Date()); }catch(e){ return ''; }
+}
+$('#btnSave').addEventListener('click', async ()=>{
+  const sc = DPR, out = document.createElement('canvas');
+  out.width = Math.round(W*sc); out.height = Math.round(H*sc);
+  const o = out.getContext('2d');
+  sizeGL(Math.min(DPR,1.5)); render(); o.drawImage(skyC, 0, 0, out.width, out.height); sizeGL(renderScale);
+  o.drawImage(floatC, 0, 0, out.width, out.height);
+  o.drawImage(drawC, 0, 0, out.width, out.height);
+  const pad = 22*sc;
+  o.shadowColor='rgba(20,32,64,.45)'; o.shadowBlur=14*sc; o.fillStyle='#fff'; o.textBaseline='alphabetic';
+  o.font = '700 '+(22*sc)+'px "Gowun Batang", serif'; o.fillText(captionTitle(), pad, out.height - pad - 20*sc);
+  o.font = (13*sc)+'px "Gowun Dodum", sans-serif'; o.fillText(captionDate(), pad, out.height - pad);
+  o.textAlign='right'; o.font = '700 '+(14*sc)+'px "Gowun Batang", serif'; o.fillText('구름멍', out.width - pad, out.height - pad);
+  out.toBlob(async blob=>{
+    if(!blob){ toast('사진을 만들지 못했어요. 다시 시도해주세요.'); return; }
+    const file = new File([blob], 'gureummeong.png', {type:'image/png'});
+    try{
+      if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:'구름멍'}); toast('사진을 공유했어요.'); return; }
+    }catch(e){ if(e && e.name==='AbortError') return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gureummeong.png';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+    toast('사진을 저장했어요.');
+  }, 'image/png');
+});
+
+/* ───────── 화면 꺼짐 방지 ───────── */
+let wakeLock=null;
+async function keepAwake(){ try{ if('wakeLock' in navigator && !document.hidden) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){} }
+document.addEventListener('visibilitychange', ()=>{
+  if(!document.hidden){ if(S.started) keepAwake(); last = performance.now(); }
+});
+
+/* ───────── 시작 ───────── */
+$('#btnStart').addEventListener('click', ()=>{
+  S.started = true; $('#intro').classList.add('gone'); document.body.classList.add('started');
+  keepAwake(); wake();
+});
+
+/* ───────── 루프 ───────── */
+let last = performance.now(), perfSum=0, perfN=0;
+function frame(now){
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  if(!document.hidden && S.env){
+    const ts = S.drawing ? 0 : 1;
+    const E = S.env, vx = Math.sin(E.windTo)*E.spd*dt*ts, vz = Math.cos(E.windTo)*E.spd*dt*ts;
+    S.off.L[0]+=vx; S.off.L[1]+=vz;
+    S.off.M[0]+=vx*1.5; S.off.M[1]+=vz*1.5;
+    S.off.H[0]+=vx*2.4; S.off.H[1]+=vz*2.4;
+    S.evo += dt*ts; S.clock += dt*ts;
+    if(S.pitchT < 1){ S.pitchT = Math.min(1, S.pitchT + dt/1.8); const k=S.pitchT<.5?4*S.pitchT**3:1-Math.pow(-2*S.pitchT+2,3)/2; S.pitch = lerp(S.pitchFrom, S.pitchTo, k); }
+    render(); drawSprites(dt);
+    perfSum += dt; perfN++;
+    if(perfN >= 90){
+      const avg = perfSum/perfN*1000; perfSum=0; perfN=0;
+      if(avg > 34 && renderScale > 0.34){ renderScale = Math.max(0.34, renderScale*0.85); sizeGL(renderScale); }
+      else if(avg < 18 && renderScale < 1){ renderScale = Math.min(1, renderScale*1.1); sizeGL(renderScale); }
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+addEventListener('resize', resize);
+buildTools(); setViewLabel();
+resize();
+S.weather = {}; seedOffsets(); computeEnv(); updateText();
+loadWeather();
+setInterval(loadWeather, REFRESH_MIN*60000);
+setInterval(()=>{ if(S.mode==='live'){ computeEnv(); updateText(); } }, 30000);
+requestAnimationFrame(frame);
+window.__gureum = S;
+})();
+</script>
+</body>
+</html>
